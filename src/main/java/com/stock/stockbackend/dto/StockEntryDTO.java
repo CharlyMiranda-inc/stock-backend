@@ -16,5 +16,6 @@ public class StockEntryDTO {
     private Long productId;
     private String productName;
     private int quantity;
+    private String reason;        // NUEVO
     private LocalDateTime date;
 }
