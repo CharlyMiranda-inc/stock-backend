@@ -6,6 +6,7 @@ import com.stock.stockbackend.model.Product;
 import com.stock.stockbackend.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -28,11 +29,13 @@ public class ProductService {
         return ProductMapper.toDTO(product);
     }
 
+    @Transactional
     public ProductDTO create(ProductDTO dto) {
         Product product = ProductMapper.toEntity(dto);
         return ProductMapper.toDTO(productRepository.save(product));
     }
 
+    @Transactional
     public ProductDTO update(Long id, ProductDTO dto) {
         Product product = productRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + id));
@@ -41,10 +44,12 @@ public class ProductService {
         return ProductMapper.toDTO(productRepository.save(product));
     }
 
+    @Transactional
     public void delete(Long id) {
         productRepository.deleteById(id);
     }
 
+    @Transactional
     public void increaseStock(Long productId, int quantity) {
         Product product = productRepository.findById(productId)
             .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
