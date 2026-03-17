@@ -4,16 +4,17 @@ import com.stock.stockbackend.dto.AuthResponse;
 import com.stock.stockbackend.dto.LoginRequest;
 import com.stock.stockbackend.dto.RegisterRequest;
 import com.stock.stockbackend.dto.UserResponseDTO;
+import com.stock.stockbackend.model.User;
 import com.stock.stockbackend.repository.UserRepository;
 import com.stock.stockbackend.service.AuthService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class AuthController {
 
     private final AuthService authService;
@@ -31,13 +32,10 @@ public class AuthController {
 
     @GetMapping("/me")
     public UserResponseDTO getCurrentUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String email = auth.getName();
-
-        var user = userRepository.findByEmail(email)
-            .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
         return new UserResponseDTO(user.getEmail(), user.getRole());
     }
+
 
 }

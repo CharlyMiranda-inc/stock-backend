@@ -1,10 +1,9 @@
 package com.stock.stockbackend.service;
 
 import com.stock.stockbackend.dto.*;
-import com.stock.stockbackend.model.Product;
-import com.stock.stockbackend.model.Sale;
-import com.stock.stockbackend.model.SaleItem;
-import com.stock.stockbackend.model.User;
+import com.stock.stockbackend.exception.InsufficientStockException;
+import com.stock.stockbackend.exception.ResourceNotFoundException;
+import com.stock.stockbackend.model.*;
 import com.stock.stockbackend.repository.ProductRepository;
 import com.stock.stockbackend.repository.SaleItemRepository;
 import com.stock.stockbackend.repository.SaleRepository;
@@ -18,6 +17,7 @@ import java.sql.Date;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -35,16 +35,16 @@ public class SaleService {
 
         for (SaleRequestDTO.ItemDTO itemDTO : request.getItems()) {
             Product product = productRepository.findById(itemDTO.getProductId())
-                .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + itemDTO.getProductId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Producto no encontrado con ID: " + itemDTO.getProductId()));
 
             if (product.getStock() < itemDTO.getQuantity()) {
-                throw new RuntimeException("Stock insuficiente para el producto: " + product.getName());
+                throw new InsufficientStockException("Stock insuficiente para el producto: " + product.getName());
             }
 
             // Descontar stock
             product.setStock(product.getStock() - itemDTO.getQuantity());
 
-            double selectedPrice = getPriceByPaymentMethod(product, request.getPaymentMethod());
+            double selectedPrice = getPriceByPaymentMethod(product, PaymentMethod.valueOf(request.getPaymentMethod().toUpperCase()));
 
             double itemTotal = selectedPrice * itemDTO.getQuantity();
             total += itemTotal;
@@ -59,7 +59,7 @@ public class SaleService {
         }
 
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByEmail(email).orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        User user = userRepository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con email: " + email));
 
         Sale sale = Sale.builder()
             .paymentMethod(request.getPaymentMethod())
@@ -86,49 +86,50 @@ public class SaleService {
 
     public List<DailySalesReportDTO> getDailySalesReport(LocalDateTime start, LocalDateTime end) {
         List<Object[]> results = saleRepository.getDailySalesReport(start, end);
-        List<DailySalesReportDTO> report = new ArrayList<>();
-        for (Object[] row : results) {
-            // row[0] es saleDate (java.sql.Date), row[1] es totalSalesCount, row[2] es totalAmount
-            DailySalesReportDTO dto = new DailySalesReportDTO(
-                ((Date) row[0]).toLocalDate(),
-                ((Number) row[1]).longValue(),
-                ((Number) row[2]).doubleValue()
-            );
-            report.add(dto);
-        }
-        return report;
+        return results.stream()
+            .map(row -> new DailySalesReportDTO(
+                    ((Date) row[0]).toLocalDate(),      // saleDate
+                    ((Number) row[1]).longValue(),      // totalSalesCount
+                    ((Number) row[2]).doubleValue()     // totalAmount
+            ))
+            .collect(Collectors.toList());
     }
 
     public List<UserSalesReportDTO> getSalesByUser(LocalDateTime from, LocalDateTime to) {
         return saleRepository.getSalesByUserBetween(from, to);
     }
 
-    public List<SaleResponseDTO> getSalesAsDTO(LocalDateTime from, LocalDateTime to) {
-        return saleRepository.findByDateBetween(from, to).stream().map(sale ->
-            new SaleResponseDTO(
-                sale.getId(),
-                sale.getDate(),
-                sale.getPaymentMethod(),
-                sale.getTotal(),
-                sale.getUser().getEmail(),
-                sale.getItems().stream().map(item ->
-                    new SaleResponseDTO.SaleItemDTO(
-                        item.getProduct().getName(),
-                        item.getQuantity(),
-                        item.getPrice()
-                    )
-                ).toList()
-            )
-        ).toList();
+    public List<SaleResponseDTO> getSalesAsDTO(LocalDateTime start, LocalDateTime end) {
+        return saleRepository.findByDateBetween(start, end).stream()
+            .map(this::convertToSaleResponseDTO)
+            .collect(Collectors.toList());
     }
 
-    private double getPriceByPaymentMethod(Product product, String paymentMethod) {
+    private SaleResponseDTO convertToSaleResponseDTO(Sale sale) {
+        List<SaleResponseDTO.SaleItemDTO> itemDTOs = sale.getItems().stream()
+            .map(item -> new SaleResponseDTO.SaleItemDTO(
+                item.getProduct().getName(),
+                item.getQuantity(),
+                item.getPrice()
+            ))
+            .collect(Collectors.toList());
+
+        return new SaleResponseDTO(
+            sale.getId(),
+            sale.getDate(),
+            sale.getPaymentMethod(),
+            sale.getTotal(),
+            sale.getUser().getEmail(),
+            itemDTOs
+        );
+    }
+
+    private double getPriceByPaymentMethod(Product product, PaymentMethod paymentMethod) {
         return switch (paymentMethod) {
-            case "Transferencia" -> product.getTransferPrice();
-            case "Efectivo" -> product.getCashPrice();
-            default -> product.getListPrice();
+            case TRANSFERENCIA -> product.getTransferPrice();
+            case EFECTIVO -> product.getCashPrice();
+            case LISTA -> product.getListPrice();
         };
     }
-
 
 }

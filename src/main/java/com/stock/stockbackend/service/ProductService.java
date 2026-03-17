@@ -6,51 +6,55 @@ import com.stock.stockbackend.model.Product;
 import com.stock.stockbackend.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 public class ProductService {
+
     private final ProductRepository productRepository;
 
-    public List<Product> getAll() {
-        return productRepository.findAll();
-    }
-
-    public List<ProductDTO> getAllProducts() {
-        return productRepository.findAll().stream()
-            .map(p -> new ProductDTO(
-                p.getId(),
-                p.getCode(),
-                p.getName(),
-                p.getStock(),
-                p.getSize(),
-                p.getColor(),
-                p.getNetPrice(),
-                p.getListPrice(),
-                p.getTransferPrice(),
-                p.getCashPrice()
-            ))
+    public List<ProductDTO> getAll() {
+        return productRepository.findAll()
+            .stream()
+            .map(ProductMapper::toDTO)
             .toList();
     }
 
+    public ProductDTO getById(Long id) {
+        Product product = productRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + id));
+        return ProductMapper.toDTO(product);
+    }
 
-    public Product create(ProductDTO dto) {
+    @Transactional
+    public ProductDTO create(ProductDTO dto) {
         Product product = ProductMapper.toEntity(dto);
-        return productRepository.save(product);
+        return ProductMapper.toDTO(productRepository.save(product));
     }
 
-    public Product update(Long id, ProductDTO dto) {
-        Product existing = productRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
+    @Transactional
+    public ProductDTO update(Long id, ProductDTO dto) {
+        Product product = productRepository.findById(id)
+            .orElseThrow(() -> new RuntimeException("Producto no encontrado con ID: " + id));
 
-        ProductMapper.updateEntity(existing, dto);
-
-        return productRepository.save(existing);
+        ProductMapper.updateEntity(product, dto);
+        return ProductMapper.toDTO(productRepository.save(product));
     }
 
+    @Transactional
     public void delete(Long id) {
         productRepository.deleteById(id);
     }
+
+    @Transactional
+    public void increaseStock(Long productId, int quantity) {
+        Product product = productRepository.findById(productId)
+            .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
+        product.setStock(product.getStock() + quantity);
+        productRepository.save(product);
+    }
+
 }
